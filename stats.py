@@ -34,11 +34,23 @@ from PIL import ImageFont
 
 import subprocess
 
+
+# Setup UPS
 DEVICE_BUS = 1
 DEVICE_ADDR = 0x17
 PROTECT_VOLT = 3700
 SAMPLE_TIME = 2
+INA_DEVICE_ADDR = 0x40
+INA_BATT_ADDR = 0x45
 
+bus = smbus2.SMBus(DEVICE_BUS)
+
+ina = INA219(0.00725, address=INA_DEVICE_ADDR)
+ina.configure()
+ina_batt = INA219(0.005, address=INA_BATT_ADDR)
+ina_batt.configure()
+
+#Set up Display
 # Raspberry Pi pin configuration:
 RST = None     # on the PiOLED this pin isnt used
 
@@ -100,37 +112,38 @@ while True:
     temp = subprocess.check_output(cmd, shell = True )
     
     # Scripts for UPS monitoring
-    ina = INA219(0.00725,address=0x40)
-    ina.configure()
+
     piVolts = round(ina.voltage(),2)
     piCurrent = round (ina.current())
     
-    ina = INA219(0.005,address=0x45) 
-    ina.configure()
-    battVolts = round(ina.voltage(),2)
+    battVolts = round(ina_batt.voltage(),2)
     
     try:
-        battCur = round(ina.current())
-        battPow = round(ina.power()/1000,1)
+        battCur = round(ina_batt.current())
+        battPow = round(ina_batt.power()/1000,1)
     except DeviceRangeError:
         battCur = 0
         battPow = 0
     
-    bus = smbus2.SMBus(DEVICE_BUS)
 
-    aReceiveBuf = bus.read_i2c_block_data(DEVICE_ADDR, 0, 32)
+    try:
+        
+        aReceiveBuf = bus.read_i2c_block_data(DEVICE_ADDR, 0, 32)
     
-    if (aReceiveBuf[8] << 8 | aReceiveBuf[7]) > 4000:
-        chargeStat = 'Charging USB C'
-    elif (aReceiveBuf[10] << 8 | aReceiveBuf[9]) > 4000:
-        chargeStat = 'Charging Micro USB.'
-    else:
-        chargeStat = 'Not Charging'
+        if (aReceiveBuf[8] << 8 | aReceiveBuf[7]) > 4000:
+            chargeStat = 'Charging USB C'
+        elif (aReceiveBuf[10] << 8 | aReceiveBuf[9]) > 4000:
+            chargeStat = 'Charging Micro USB.'
+        else:
+            chargeStat = 'Not Charging'
     
-    battTemp = (aReceiveBuf[12] << 8 | aReceiveBuf[11])
+        battTemp = (aReceiveBuf[12] << 8 | aReceiveBuf[11])
+        battCap = (aReceiveBuf[20] << 8 | aReceiveBuf[19])
     
-    battCap = (aReceiveBuf[20] << 8 | aReceiveBuf[19])
-
+    except:
+        chargeStat = 'Error reading UPS' 
+        #FIXME probably we want to log this and not just pass... 
+        pass
 
     if (dispC <= 15):
         # Pi Stats Display
@@ -158,5 +171,4 @@ while True:
     # Display image.
     disp.image(image)
     disp.display()
-    bus.close()
     time.sleep(.1)
