@@ -63,6 +63,64 @@ def get_sysinfo(nic="eth0"):
 
     return Systeminfo(ip, load, loadpercent, diskpercent, disktotal, diskused, memtotal, memused, temp)
 
+def get_upsinfo():
+    """
+    Collect USP information and return this in a named tuple
+    """
+    global ups_i2c
+    global ina_i2c
+    global ina_batt_i2c
+
+    UpsInfo = namedtuple("UpsInfo",
+                         "McuVccVolt PogoPinVolt BatPinCVolt UsbCVolt UsbMicroVolt "
+                         "BatTemperature BatFullVolt BatEmptyVolt BatProtectVolt "
+                         "BatRemaining SampleTime AutoPowerOn "
+                         "PiVolt PiCurrent PiPower BattVolt BattCurrent BattPower")
+
+    buf = []
+
+    # UPS Register Addresses from
+    # https://wiki.52pi.com/index.php/UPS_Plus_SKU:_EP-0136?spm=a2g0o.detail.1000023.17.4bfb6b35vkFvoW#USB_Plus_V5.0_Register_Mapping_Chart
+
+    buf = ups_i2c.readList(0x00, 0x20)
+    McuVccVolt = int.from_bytes([buf[0x01], buf[0x02]], byteorder='little')
+    PogoPinVolt = int.from_bytes([buf[0x03], buf[0x04]], byteorder='little')
+    BatPinCVolt = int.from_bytes([buf[0x05], buf[0x06]], byteorder='little')
+    UsbCVolt = int.from_bytes([buf[0x07], buf[0x08]], byteorder='little')
+    UsbMicroVolt = int.from_bytes([buf[0x09], buf[0x0A]], byteorder='little')
+    BatTemperature = int.from_bytes([buf[0x0B], buf[0x0C]], byteorder='little')
+    BatFullVolt = int.from_bytes([buf[0x0D], buf[0x0E]], byteorder='little')
+    BatEmptyVolt = int.from_bytes([buf[0x0F], buf[0x10]], byteorder='little')
+    BatProtectVolt = int.from_bytes([buf[0x11], buf[0x12]], byteorder='little')
+    BatRemaining = int.from_bytes([buf[0x13], buf[0x14]], byteorder='little')
+    SampleTime = int.from_bytes([buf[0x15], buf[0x16]], byteorder='little')
+    AutoPowerOn = buf[0x19]
+
+    # Read both ina219 powermonitors
+    PiVolt = int(ina_i2c.voltage() * 1000)
+    try:
+        PiCurrent = int(ina_i2c.current())
+        PiPower = int(ina_i2c.power())
+    # FIXME : What is DeviceRangeError ?
+    except DeviceRangeError:
+        PiCurrent = 0
+        PiPower = 0
+
+    BattVolt = int(ina_batt_i2c.voltage() * 1000)
+    try:
+        BattCurrent = int(ina_batt_i2c.current())
+        BattPower = int(ina_batt_i2c.power())
+    # FIXME : What is DeviceRangeError ?
+    except DeviceRangeError:
+        BattCurrent = 0
+        BattPower = 0
+
+    return UpsInfo(McuVccVolt, PogoPinVolt, BatPinCVolt, UsbCVolt, UsbMicroVolt,
+                   BatTemperature, BatFullVolt, BatEmptyVolt, BatProtectVolt, 
+                   BatRemaining, SampleTime, AutoPowerOn,
+                   PiVolt, PiCurrent, PiPower, BattVolt, BattCurrent, BattPower)
+
+
 # Setup UPS
 DEVICE_BUS = 1
 DEVICE_ADDR = 0x17
@@ -134,48 +192,27 @@ while True:
                 (f"Disk : {sysinfo.diskused} /  {sysinfo.disktotal} GB"), font=font, fill=255)
                 
     else: # 3 < dipC = < 6
-        
-        # Scripts for UPS monitoring
-
-        piVolts = round(ina_i2c.voltage(),2)
-        piCurrent = round(ina_i2c.current())
-        
-        battVolts = round(ina_batt_i2c.voltage(),2)
-        
-        try:
-            battCur = round(ina_batt_i2c.current())
-            battPow = round(ina_batt_i2c.power()/1000,1)
-        except DeviceRangeError:
-            battCur = 0
-            battPow = 0
-        
-
-        try:
-            
-            aReceiveBuf = ups_i2c.readList(0, 32)
-            if (aReceiveBuf[8] << 8 | aReceiveBuf[7]) > 4000:
-                chargeStat = 'Charging USB C'
-            elif (aReceiveBuf[10] << 8 | aReceiveBuf[9]) > 4000:
-                chargeStat = 'Charging Micro USB.'
-            else:
-                chargeStat = 'Not Charging'
-        
-            battTemp = (aReceiveBuf[12] << 8 | aReceiveBuf[11])
-            battCap = (aReceiveBuf[20] << 8 | aReceiveBuf[19])
-        
-        except:
-            chargeStat = 'Error reading UPS' 
-            #FIXME probably we want to log this and not just pass... 
-            pass
-
         # UPS Stats Display
-        draw.text((0, 0), "Pi: " + str(piVolts) + "V  " + str(piCurrent) + "mA", font=font, fill=255)
-        draw.text((0, 16), "Batt: " + str(battVolts) + "V  " + str(battCap) + "%", font=font, fill=255)
-        if (battCur > 0):
-            draw.text((0, 32), "Chrg: " + str(battCur) + "mA " + str(battPow) + "W", font=font, fill=255)
+        upsinfo = get_upsinfo()
+
+        if  (upsinfo.UsbCVolt > 4000) :
+            ChargeStat = 'Charging USB C'
+        elif (upsinfo.UsbMicroVolt > 4000) :
+            ChargeStat = 'Charging Micro USB.'
         else:
-            draw.text((0, 32), "Dchrg: " + str(0-battCur) + "mA " + str(battPow) + "W", font=font, fill=255)
-        draw.text((15, 48), chargeStat, font=font, fill=255)
+            ChargeStat = 'Not Charging'
+
+        draw.text((0, 0), 
+            (f"Pi: {upsinfo.PiVolt} V {upsinfo.PiCurrent} mA"), font=font, fill=255)        
+        draw.text((0, 16), 
+            (f"Batt: {upsinfo.BattVolt} V  {upsinfo.BatRemaining} %"), font=font, fill=255)
+        if (upsinfo.BattCurrent > 0):
+            draw.text((0, 32), 
+                (f"Chrg: {upsinfo.BattCurrent} mA {upsinfo.BattPower} W"), font=font, fill=255)         
+        else:
+            draw.text((0, 32), 
+            (f"Dchrg: {-upsinfo.BattCurrent} mA {upsinfo.BattPower} W"), font=font, fill=255)           
+        draw.text((15, 48), ChargeStat, font=font, fill=255)
 
     # Display image.
     disp.image(image)
