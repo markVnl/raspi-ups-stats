@@ -26,7 +26,7 @@ from collections import namedtuple
 import time
 
 import Adafruit_GPIO.I2C as I2C
-from ina219 import INA219,DeviceRangeError
+from ina219 import INA219, DeviceRangeError
 import Adafruit_SSD1306
 
 from PIL import Image
@@ -36,32 +36,33 @@ from PIL import ImageFont
 
 def get_sysinfo(nic="eth0"):
     """
-    Collect system information and return this as strings in a named tuple
+    Collect system information and return this in a named tuple
     This takes one argument : the primary NIC, defaults to eth0
     """
-    Systeminfo = namedtuple(
-        "Systeminfo", "ip load loadpercent diskpercent disktotal diskused memtotal memused temp")
+    SystemInfo = namedtuple("SystemInfo",
+                            "IP Load LoadPercent DiskPercent DiskTotal DiskUsed MemTotal MemUsed CPUTemp")
     try:
-        ip = psutil.net_if_addrs()[nic][0].address
+        IP = psutil.net_if_addrs()[nic][0].address
     except KeyError:
-        ip = (f"{nic} NA")
-    load = psutil.getloadavg()
+        IP = (f"{nic} NA")
+    Load = psutil.getloadavg()
     cores = psutil.cpu_count()
     mem = psutil.virtual_memory()
     disk = psutil.disk_usage('/')
-    temp = psutil.sensors_temperatures(fahrenheit=False)['cpu_thermal'][0].current
+    CPUTemp = psutil.sensors_temperatures()['cpu_thermal'][0].current
 
-    ip = str(ip)
-    loadpercent = str(round((load[1]*100)/cores))
-    load = str(load[1])
-    memtotal = str(round(mem.available/(1024 ** 2)))
-    memused = str(round(mem.used/(1024 ** 2)))
-    disktotal = str(round(disk.total/(1024 ** 3)))
-    diskused = str(round(disk.used/(1024 ** 3)))
-    diskpercent = str(disk.percent)
-    temp = str(round(temp,1))
+    IP = str(IP)
+    LoadPercent = int(round((Load[1]*100)/cores))
+    Load = int(Load[1])
+    MemTotal = round(mem.available/(1024 ** 2))
+    MemUsed = round(mem.used/(1024 ** 2))
+    DiskTotal = round(disk.total/(1024 ** 3))
+    DiskUsed = round(disk.used/(1024 ** 3))
+    DiskPercent = int(disk.percent)
+    CPUTemp = round(CPUTemp, 1)
 
-    return Systeminfo(ip, load, loadpercent, diskpercent, disktotal, diskused, memtotal, memused, temp)
+    return SystemInfo(IP, Load, LoadPercent, DiskPercent, DiskTotal, DiskUsed, MemTotal, MemUsed, CPUTemp)
+
 
 def get_upsinfo():
     """
@@ -116,7 +117,7 @@ def get_upsinfo():
         BattPower = 0
 
     return UpsInfo(McuVccVolt, PogoPinVolt, BatPinCVolt, UsbCVolt, UsbMicroVolt,
-                   BatTemperature, BatFullVolt, BatEmptyVolt, BatProtectVolt, 
+                   BatTemperature, BatFullVolt, BatEmptyVolt, BatProtectVolt,
                    BatRemaining, SampleTime, AutoPowerOn,
                    PiVolt, PiCurrent, PiPower, BattVolt, BattCurrent, BattPower)
 
@@ -174,52 +175,52 @@ font = ImageFont.truetype('PixelOperator.ttf', 16)
 while True:
 
     # Draw a black filled box to clear the image.
-    draw.rectangle((0,0,width,height), outline=0, fill=0)
+    draw.rectangle((0, 0, width, height), outline=0, fill=0)
 
     if (dispC <= 3):
         # Pi Stats Display
         sysinfo = (get_sysinfo())
 
         draw.text((0, 0),
-                (f"IP : {sysinfo.ip}"), font=font, fill=255)
+                  (f"IP : {sysinfo.IP}"), font=font, fill=255)
         draw.text((0, 16),
-                (f"CPU : {sysinfo.loadpercent} %"), font=font, fill=255)
+                  (f"CPU : {sysinfo.LoadPercent} %"), font=font, fill=255)
         draw.text((80, 16),
-                (f"{sysinfo.temp} C"), font=font, fill=255)
+                  (f"{sysinfo.CPUTemp} C"), font=font, fill=255)
         draw.text((0, 32),
-                (f"Mem : {sysinfo.memused} / {sysinfo.memtotal} MB"), font=font, fill=255)
+                  (f"Mem : {sysinfo.MemUsed} / {sysinfo.MemTotal} MB"), font=font, fill=255)
         draw.text((0, 48),
-                (f"Disk : {sysinfo.diskused} /  {sysinfo.disktotal} GB"), font=font, fill=255)
-                
-    else: # 3 < dipC = < 6
+                  (f"Disk : {sysinfo.DiskUsed} /  {sysinfo.DiskTotal} GB"), font=font, fill=255)
+
+    else:  # 3 < dipC = < 6
         # UPS Stats Display
         upsinfo = get_upsinfo()
 
-        if  (upsinfo.UsbCVolt > 4000) :
+        if (upsinfo.UsbCVolt > 4000):
             ChargeStat = 'Charging USB C'
-        elif (upsinfo.UsbMicroVolt > 4000) :
+        elif (upsinfo.UsbMicroVolt > 4000):
             ChargeStat = 'Charging Micro USB.'
         else:
             ChargeStat = 'Not Charging'
 
-        draw.text((0, 0), 
-            (f"Pi: {upsinfo.PiVolt} V {upsinfo.PiCurrent} mA"), font=font, fill=255)        
-        draw.text((0, 16), 
-            (f"Batt: {upsinfo.BattVolt} V  {upsinfo.BatRemaining} %"), font=font, fill=255)
+        draw.text((0, 0),
+                  (f"Pi: {upsinfo.PiVolt} V {upsinfo.PiCurrent} mA"), font=font, fill=255)
+        draw.text((0, 16),
+                  (f"Batt: {upsinfo.BattVolt} V  {upsinfo.BatRemaining} %"), font=font, fill=255)
         if (upsinfo.BattCurrent > 0):
-            draw.text((0, 32), 
-                (f"Chrg: {upsinfo.BattCurrent} mA {upsinfo.BattPower} W"), font=font, fill=255)         
+            draw.text((0, 32),
+                      (f"Chrg: {upsinfo.BattCurrent} mA {upsinfo.BattPower} W"), font=font, fill=255)
         else:
-            draw.text((0, 32), 
-            (f"Dchrg: {-upsinfo.BattCurrent} mA {upsinfo.BattPower} W"), font=font, fill=255)           
+            draw.text((0, 32),
+                      (f"Dchrg: {-upsinfo.BattCurrent} mA {upsinfo.BattPower} W"), font=font, fill=255)
         draw.text((15, 48), ChargeStat, font=font, fill=255)
 
     # Display image.
     disp.image(image)
     disp.display()
-     
+
     if (dispC == 6):
         dispC = 0
-    dispC+=1 
+    dispC += 1
 
     time.sleep(1)
