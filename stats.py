@@ -20,6 +20,10 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
+
+import psutil
+from collections import namedtuple
+
 import time
 import smbus2
 import logging
@@ -32,8 +36,35 @@ from PIL import Image
 from PIL import ImageDraw
 from PIL import ImageFont
 
-import subprocess
 
+def get_sysinfo(nic="eth0"):
+    """
+    Collect system information and return this as strings in a named tuple
+    This takes one argument : the primary NIC, defaults to eth0
+    """
+    Systeminfo = namedtuple(
+        "Systeminfo", "ip load loadpercent diskpercent disktotal diskused memtotal memused temp")
+    try:
+        ip = psutil.net_if_addrs()[nic][0].address
+    except KeyError:
+        ip = (f"{nic} NA")
+    load = psutil.getloadavg()
+    cores = psutil.cpu_count()
+    mem = psutil.virtual_memory()
+    disk = psutil.disk_usage('/')
+    temp = psutil.sensors_temperatures(fahrenheit=False)['cpu_thermal'][0].current
+
+    ip = str(ip)
+    loadpercent = str(round((load[1]*100)/cores))
+    load = str(load[1])
+    memtotal = str(round(mem.available/(1024 ** 2)))
+    memused = str(round(mem.used/(1024 ** 2)))
+    disktotal = str(round(disk.total/(1024 ** 3)))
+    diskused = str(round(disk.used/(1024 ** 3)))
+    diskpercent = str(disk.percent)
+    temp = str(round(temp,1))
+
+    return Systeminfo(ip, load, loadpercent, diskpercent, disktotal, diskused, memtotal, memused, temp)
 
 # Setup UPS
 DEVICE_BUS = 1
@@ -99,18 +130,6 @@ while True:
     # Draw a black filled box to clear the image.
     draw.rectangle((0,0,width,height), outline=0, fill=0)
 
-    # Shell scripts for system monitoring from here : https://unix.stackexchange.com/questions/119126/command-to-display-memory-usage-disk-usage-and-cpu-load
-    cmd = "hostname -I | cut -d\' \' -f1"
-    IP = subprocess.check_output(cmd, shell = True )
-    cmd = "top -bn1 | grep load | awk '{printf \"CPU: %.2f\", $(NF-2)}'"
-    CPU = subprocess.check_output(cmd, shell = True )
-    cmd = "free -m | awk 'NR==2{printf \"Mem: %s/%sMB %.2f%%\", $3,$2,$3*100/$2 }'"
-    MemUsage = subprocess.check_output(cmd, shell = True )
-    cmd = "df -h | awk '$NF==\"/\"{printf \"Disk: %d/%dGB %s\", $3,$2,$5}'"
-    Disk = subprocess.check_output(cmd, shell = True )
-    cmd = "vcgencmd measure_temp |cut -f 2 -d '='"
-    temp = subprocess.check_output(cmd, shell = True )
-    
     # Scripts for UPS monitoring
 
     piVolts = round(ina.voltage(),2)
@@ -147,11 +166,18 @@ while True:
 
     if (dispC <= 15):
         # Pi Stats Display
-        draw.text((x, top+2), "IP: " + str(IP,'utf-8'), font=font, fill=255)
-        draw.text((x, top+18), str(CPU,'utf-8') + "%", font=font, fill=255)
-        draw.text((x+80, top+18), str(temp,'utf-8') , font=font, fill=255)
-        draw.text((x, top+34), str(MemUsage,'utf-8'), font=font, fill=255)
-        draw.text((x, top+50), str(Disk,'utf-8'), font=font, fill=255)
+        sysinfo = (get_sysinfo())
+
+        draw.text(((x, top+2),
+                (f"IP : {sysinfo.ip}"), font=font, fill=255)
+        draw.text((x, top+18),
+                (f"CPU : {sysinfo.loadpercent} %"), font=font, fill=255)
+        draw.text((x+80, top+18),
+                (f"{sysinfo.temp} C"), font=font, fill=255)
+        draw.text((x, top+34),
+                (f"Mem : {sysinfo.memused} / {sysinfo.memtotal} MB"), font=font, fill=255)
+        draw.text((x, top+50),
+                (f"Disk : {sysinfo.diskused} /  {sysinfo.disktotal} GB"), font=font, fill=255)
         dispC+=1
         
     else:
