@@ -26,10 +26,8 @@ from collections import namedtuple
 
 import time
 import smbus2
-import logging
 from ina219 import INA219,DeviceRangeError
 
-import Adafruit_GPIO.SPI as SPI
 import Adafruit_SSD1306
 
 from PIL import Image
@@ -81,12 +79,8 @@ ina.configure()
 ina_batt = INA219(0.005, address=INA_BATT_ADDR)
 ina_batt.configure()
 
-#Set up Display
-# Raspberry Pi pin configuration:
-RST = None     # on the PiOLED this pin isnt used
-
 # 128x64 display with hardware I2C:
-disp = Adafruit_SSD1306.SSD1306_128_64(rst=RST)
+disp = Adafruit_SSD1306.SSD1306_128_64(rst=None)
 
 # Initialize library.
 disp.begin()
@@ -103,17 +97,6 @@ image = Image.new('1', (width, height))
 
 # Get drawing object to draw on image.
 draw = ImageDraw.Draw(image)
-
-# Draw a black filled box to clear the image.
-draw.rectangle((0,0,width,height), outline=0, fill=0)
-
-# Draw some shapes.
-# First define some constants to allow easy resizing of shapes.
-padding = -2
-top = padding
-bottom = height-padding
-# Move left to right keeping track of the current x position for drawing shapes.
-x = 0
 
 # Display counter
 dispC = 0
@@ -168,28 +151,28 @@ while True:
         # Pi Stats Display
         sysinfo = (get_sysinfo())
 
-        draw.text(((x, top+2),
+        draw.text((0, 0),
                 (f"IP : {sysinfo.ip}"), font=font, fill=255)
-        draw.text((x, top+18),
+        draw.text((0, 16),
                 (f"CPU : {sysinfo.loadpercent} %"), font=font, fill=255)
-        draw.text((x+80, top+18),
+        draw.text((80, 16),
                 (f"{sysinfo.temp} C"), font=font, fill=255)
-        draw.text((x, top+34),
+        draw.text((0, 32),
                 (f"Mem : {sysinfo.memused} / {sysinfo.memtotal} MB"), font=font, fill=255)
-        draw.text((x, top+50),
+        draw.text((0, 48),
                 (f"Disk : {sysinfo.diskused} /  {sysinfo.disktotal} GB"), font=font, fill=255)
         dispC+=1
         
     else:
     
         # UPS Stats Display
-        draw.text((x, top+2), "Pi: " + str(piVolts) + "V  " + str(piCurrent) + "mA", font=font, fill=255)
-        draw.text((x, top+18), "Batt: " + str(battVolts) + "V  " + str(battCap) + "%", font=font, fill=255)
+        draw.text((0, 0), "Pi: " + str(piVolts) + "V  " + str(piCurrent) + "mA", font=font, fill=255)
+        draw.text((0, 16), "Batt: " + str(battVolts) + "V  " + str(battCap) + "%", font=font, fill=255)
         if (battCur > 0):
-            draw.text((x, top+34), "Chrg: " + str(battCur) + "mA " + str(battPow) + "W", font=font, fill=255)
+            draw.text((0, 32), "Chrg: " + str(battCur) + "mA " + str(battPow) + "W", font=font, fill=255)
         else:
-            draw.text((x, top+34), "Dchrg: " + str(0-battCur) + "mA " + str(battPow) + "W", font=font, fill=255)
-        draw.text((x+15, top+50), chargeStat, font=font, fill=255)
+            draw.text((0, 32), "Dchrg: " + str(0-battCur) + "mA " + str(battPow) + "W", font=font, fill=255)
+        draw.text((15, 48), chargeStat, font=font, fill=255)
         dispC+=1
         if (dispC == 30):
             dispC = 0
