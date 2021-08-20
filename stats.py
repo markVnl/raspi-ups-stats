@@ -23,11 +23,10 @@
 
 import psutil
 from collections import namedtuple
-
 import time
-import smbus2
-from ina219 import INA219,DeviceRangeError
 
+import Adafruit_GPIO.I2C as I2C
+from ina219 import INA219,DeviceRangeError
 import Adafruit_SSD1306
 
 from PIL import Image
@@ -72,15 +71,21 @@ SAMPLE_TIME = 2
 INA_DEVICE_ADDR = 0x40
 INA_BATT_ADDR = 0x45
 
-bus = smbus2.SMBus(DEVICE_BUS)
+ups_i2c = I2C.get_i2c_device(DEVICE_ADDR)
 
-ina = INA219(0.00725, address=INA_DEVICE_ADDR)
-ina.configure()
-ina_batt = INA219(0.005, address=INA_BATT_ADDR)
-ina_batt.configure()
+ina_i2c = INA219(0.00725, address=INA_DEVICE_ADDR)
+ina_i2c.configure()
+ina_batt_i2c = INA219(0.005, address=INA_BATT_ADDR)
+ina_batt_i2c.configure()
 
 # 128x64 display with hardware I2C:
-disp = Adafruit_SSD1306.SSD1306_128_64(rst=None)
+
+# Note: for i2c_bus 3 add to /boot/config.txt:
+# dtoverlay=i2c-gpio,i2c_gpio_sda=5,i2c_gpio_scl=6,bus=3
+# then pin GPIO-5 (pin 29) is sda and GPIO-6 (pin 31) is scl of i2c_bus 3
+
+DEVICE_BUS_DISPLAY = 1   # 1 or 3
+disp = Adafruit_SSD1306.SSD1306_128_64(rst=None, i2c_bus=DEVICE_BUS_DISPLAY)
 
 # Initialize library.
 disp.begin()
@@ -132,14 +137,14 @@ while True:
         
         # Scripts for UPS monitoring
 
-        piVolts = round(ina.voltage(),2)
-        piCurrent = round (ina.current())
+        piVolts = round(ina_i2c.voltage(),2)
+        piCurrent = round(ina_i2c.current())
         
-        battVolts = round(ina_batt.voltage(),2)
+        battVolts = round(ina_batt_i2c.voltage(),2)
         
         try:
-            battCur = round(ina_batt.current())
-            battPow = round(ina_batt.power()/1000,1)
+            battCur = round(ina_batt_i2c.current())
+            battPow = round(ina_batt_i2c.power()/1000,1)
         except DeviceRangeError:
             battCur = 0
             battPow = 0
@@ -147,8 +152,7 @@ while True:
 
         try:
             
-            aReceiveBuf = bus.read_i2c_block_data(DEVICE_ADDR, 0, 32)
-        
+            aReceiveBuf = ups_i2c.readList(0, 32)
             if (aReceiveBuf[8] << 8 | aReceiveBuf[7]) > 4000:
                 chargeStat = 'Charging USB C'
             elif (aReceiveBuf[10] << 8 | aReceiveBuf[9]) > 4000:
