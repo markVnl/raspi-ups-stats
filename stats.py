@@ -113,41 +113,7 @@ while True:
     # Draw a black filled box to clear the image.
     draw.rectangle((0,0,width,height), outline=0, fill=0)
 
-    # Scripts for UPS monitoring
-
-    piVolts = round(ina.voltage(),2)
-    piCurrent = round (ina.current())
-    
-    battVolts = round(ina_batt.voltage(),2)
-    
-    try:
-        battCur = round(ina_batt.current())
-        battPow = round(ina_batt.power()/1000,1)
-    except DeviceRangeError:
-        battCur = 0
-        battPow = 0
-    
-
-    try:
-        
-        aReceiveBuf = bus.read_i2c_block_data(DEVICE_ADDR, 0, 32)
-    
-        if (aReceiveBuf[8] << 8 | aReceiveBuf[7]) > 4000:
-            chargeStat = 'Charging USB C'
-        elif (aReceiveBuf[10] << 8 | aReceiveBuf[9]) > 4000:
-            chargeStat = 'Charging Micro USB.'
-        else:
-            chargeStat = 'Not Charging'
-    
-        battTemp = (aReceiveBuf[12] << 8 | aReceiveBuf[11])
-        battCap = (aReceiveBuf[20] << 8 | aReceiveBuf[19])
-    
-    except:
-        chargeStat = 'Error reading UPS' 
-        #FIXME probably we want to log this and not just pass... 
-        pass
-
-    if (dispC <= 15):
+    if (dispC <= 3):
         # Pi Stats Display
         sysinfo = (get_sysinfo())
 
@@ -161,10 +127,43 @@ while True:
                 (f"Mem : {sysinfo.memused} / {sysinfo.memtotal} MB"), font=font, fill=255)
         draw.text((0, 48),
                 (f"Disk : {sysinfo.diskused} /  {sysinfo.disktotal} GB"), font=font, fill=255)
-        dispC+=1
+                
+    else: # 3 < dipC = < 6
         
-    else:
-    
+        # Scripts for UPS monitoring
+
+        piVolts = round(ina.voltage(),2)
+        piCurrent = round (ina.current())
+        
+        battVolts = round(ina_batt.voltage(),2)
+        
+        try:
+            battCur = round(ina_batt.current())
+            battPow = round(ina_batt.power()/1000,1)
+        except DeviceRangeError:
+            battCur = 0
+            battPow = 0
+        
+
+        try:
+            
+            aReceiveBuf = bus.read_i2c_block_data(DEVICE_ADDR, 0, 32)
+        
+            if (aReceiveBuf[8] << 8 | aReceiveBuf[7]) > 4000:
+                chargeStat = 'Charging USB C'
+            elif (aReceiveBuf[10] << 8 | aReceiveBuf[9]) > 4000:
+                chargeStat = 'Charging Micro USB.'
+            else:
+                chargeStat = 'Not Charging'
+        
+            battTemp = (aReceiveBuf[12] << 8 | aReceiveBuf[11])
+            battCap = (aReceiveBuf[20] << 8 | aReceiveBuf[19])
+        
+        except:
+            chargeStat = 'Error reading UPS' 
+            #FIXME probably we want to log this and not just pass... 
+            pass
+
         # UPS Stats Display
         draw.text((0, 0), "Pi: " + str(piVolts) + "V  " + str(piCurrent) + "mA", font=font, fill=255)
         draw.text((0, 16), "Batt: " + str(battVolts) + "V  " + str(battCap) + "%", font=font, fill=255)
@@ -173,11 +172,13 @@ while True:
         else:
             draw.text((0, 32), "Dchrg: " + str(0-battCur) + "mA " + str(battPow) + "W", font=font, fill=255)
         draw.text((15, 48), chargeStat, font=font, fill=255)
-        dispC+=1
-        if (dispC == 30):
-            dispC = 0
 
     # Display image.
     disp.image(image)
     disp.display()
-    time.sleep(.1)
+     
+    if (dispC == 6):
+        dispC = 0
+    dispC+=1 
+
+    time.sleep(1)
