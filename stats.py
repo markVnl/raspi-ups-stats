@@ -25,6 +25,7 @@ import psutil
 from collections import namedtuple
 import time
 import signal
+import os
 
 import Adafruit_GPIO.I2C as I2C
 from ina219 import INA219, DeviceRangeError
@@ -36,6 +37,8 @@ from PIL import Image, ImageDraw, ImageFont
 """
 Besides the RTC The UPS Plus SKU: EP-0136 has 3 i2c devices on the default i2c_bus 1 :
 - The UPS itself on address 0x17 (with Little.Endian byte order)
+  A battery protect voltage of 3700mV  is written to the ups (register 0x11),
+  the ups cuts power to the RPI under this threshold 
 - A TI ina219 powermonitor for the RPI on addres 0x40
   This "pi_power" monitor has a sense(shunt) resistor of 7.25 mOhm
 - A TI ina219 powermonitor for the battery  on address 0x45
@@ -44,6 +47,7 @@ Both powermoninitors are configured with a maximum voltage range of 16 Volt and
 a maximun expected current draw of 3 Amp for most sensible resolution
 """
 ups = I2C.get_i2c_device(0x17)
+ups.writeList(0x11, int(3700).to_bytes(2, byteorder='little'))
 pi_power = INA219(0.00725, max_expected_amps=3, address=0x40)
 pi_power.configure(pi_power.RANGE_16V, pi_power.GAIN_AUTO)
 bat_power = INA219(0.005, max_expected_amps=3, address=0x45)
@@ -202,6 +206,16 @@ while not Stop:
 
     if (LoopCounter == 6):
         LoopCounter = 0
+        if (upsinfo.BattVolt < 3900):
+            draw.rectangle((0, 0, width, height), outline=0, fill=0)
+            draw.text((0, 20), "Poweringdown System", font=font, fill=255)
+            disp.image(image)
+            disp.display()
+            ups.write8(0x18, 60)  # Cut power in 60 seconds
+            os.system("poweroff")
+            while not Stop:
+                pass
+
     LoopCounter += 1
     time.sleep(1)
 
