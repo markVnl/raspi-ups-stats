@@ -40,7 +40,8 @@ def get_sysinfo(nic="eth0"):
     This takes one argument : the primary NIC, defaults to eth0
     """
     SystemInfo = namedtuple("SystemInfo",
-                            "IP Load LoadPercent DiskPercent DiskTotal DiskUsed MemTotal MemUsed CPUTemp")
+                            "IP Load LoadPercent DiskPercent DiskTotal DiskUsed "
+                            "MemTotal MemUsed CPUTemp")
     try:
         IP = psutil.net_if_addrs()[nic][0].address
     except KeyError:
@@ -61,7 +62,8 @@ def get_sysinfo(nic="eth0"):
     DiskPercent = int(disk.percent)
     CPUTemp = round(CPUTemp, 1)
 
-    return SystemInfo(IP, Load, LoadPercent, DiskPercent, DiskTotal, DiskUsed, MemTotal, MemUsed, CPUTemp)
+    return SystemInfo(IP, Load, LoadPercent, DiskPercent, DiskTotal, DiskUsed,
+                      MemTotal, MemUsed, CPUTemp)
 
 
 def get_upsinfo():
@@ -73,9 +75,7 @@ def get_upsinfo():
     global ina_batt_i2c
 
     UpsInfo = namedtuple("UpsInfo",
-                         "McuVccVolt PogoPinVolt BatPinCVolt UsbCVolt UsbMicroVolt "
-                         "BatTemperature BatFullVolt BatEmptyVolt BatProtectVolt "
-                         "BatRemaining SampleTime AutoPowerOn "
+                         "UsbCVolt UsbMicroVolt BatRemaining  "
                          "PiVolt PiCurrent PiPower BattVolt BattCurrent BattPower")
 
     buf = []
@@ -83,19 +83,12 @@ def get_upsinfo():
     # UPS Register Addresses from
     # https://wiki.52pi.com/index.php/UPS_Plus_SKU:_EP-0136?spm=a2g0o.detail.1000023.17.4bfb6b35vkFvoW#USB_Plus_V5.0_Register_Mapping_Chart
 
-    buf = ups_i2c.readList(0x00, 0x20)
-    McuVccVolt = int.from_bytes([buf[0x01], buf[0x02]], byteorder='little')
-    PogoPinVolt = int.from_bytes([buf[0x03], buf[0x04]], byteorder='little')
-    BatPinCVolt = int.from_bytes([buf[0x05], buf[0x06]], byteorder='little')
-    UsbCVolt = int.from_bytes([buf[0x07], buf[0x08]], byteorder='little')
-    UsbMicroVolt = int.from_bytes([buf[0x09], buf[0x0A]], byteorder='little')
-    BatTemperature = int.from_bytes([buf[0x0B], buf[0x0C]], byteorder='little')
-    BatFullVolt = int.from_bytes([buf[0x0D], buf[0x0E]], byteorder='little')
-    BatEmptyVolt = int.from_bytes([buf[0x0F], buf[0x10]], byteorder='little')
-    BatProtectVolt = int.from_bytes([buf[0x11], buf[0x12]], byteorder='little')
-    BatRemaining = int.from_bytes([buf[0x13], buf[0x14]], byteorder='little')
-    SampleTime = int.from_bytes([buf[0x15], buf[0x16]], byteorder='little')
-    AutoPowerOn = buf[0x19]
+    buf = ups_i2c.readList(0x07, 4)
+    UsbCVolt = int.from_bytes([buf[0], buf[1]], byteorder='little')
+    UsbMicroVolt = int.from_bytes([buf[2], buf[3]], byteorder='little')
+
+    buf = ups_i2c.readList(0x13, 2)
+    BatRemaining = int.from_bytes([buf[0], buf[1]], byteorder='little')
 
     # Read both ina219 powermonitors
     PiVolt = int(ina_i2c.voltage() * 1000)
@@ -116,9 +109,7 @@ def get_upsinfo():
         BattCurrent = 0
         BattPower = 0
 
-    return UpsInfo(McuVccVolt, PogoPinVolt, BatPinCVolt, UsbCVolt, UsbMicroVolt,
-                   BatTemperature, BatFullVolt, BatEmptyVolt, BatProtectVolt,
-                   BatRemaining, SampleTime, AutoPowerOn,
+    return UpsInfo(UsbCVolt, UsbMicroVolt, BatRemaining,
                    PiVolt, PiCurrent, PiPower, BattVolt, BattCurrent, BattPower)
 
 
