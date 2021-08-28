@@ -143,7 +143,7 @@ ina_batt_i2c.configure()
 # dtoverlay=i2c-gpio,i2c_gpio_sda=5,i2c_gpio_scl=6,bus=3
 # then pin GPIO-5 (pin 29) is sda and GPIO-6 (pin 31) is scl of i2c_bus 3
 
-DEVICE_BUS_DISPLAY = 1   # 1 or 3
+DEVICE_BUS_DISPLAY = 3   # 1 or 3
 disp = Adafruit_SSD1306.SSD1306_128_64(rst=None, i2c_bus=DEVICE_BUS_DISPLAY)
 
 # Initialize library.
