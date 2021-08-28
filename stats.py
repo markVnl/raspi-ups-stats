@@ -129,18 +129,16 @@ def get_upsinfo():
     try:
         PiCurrent = int(ina_i2c.current())
         PiPower = int(ina_i2c.power())
-    # FIXME : What is DeviceRangeError ?
-    except DeviceRangeError:
-        PiCurrent = 0
-        PiPower = 0
+    except DeviceRangeError: # (Out Of Range)
+        BattCurrent = "*OOR*"
+        BattPower = "*OOR*"
     BattVolt = int(ina_batt_i2c.voltage() * 1000)
     try:
         BattCurrent = int(ina_batt_i2c.current())
         BattPower = int(ina_batt_i2c.power())
-    # FIXME : What is DeviceRangeError ?
-    except DeviceRangeError:
-        BattCurrent = 0
-        BattPower = 0
+    except DeviceRangeError: # (Out Of Range)
+        BattCurrent = "*OOR*"
+        BattPower = "*OOR*"
 
     return UpsInfo(UsbCVolt, UsbMicroVolt, BatRemaining,
                    PiVolt, PiCurrent, PiPower, BattVolt, BattCurrent, BattPower)
