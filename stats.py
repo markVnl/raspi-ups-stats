@@ -184,13 +184,11 @@ while True:
         draw.text((0, 0),
                   (f"IP : {sysinfo.IP}"), font=font, fill=255)
         draw.text((0, 16),
-                  (f"CPU : {sysinfo.LoadPercent} %"), font=font, fill=255)
-        draw.text((80, 16),
-                  (f"{sysinfo.CPUTemp} C"), font=font, fill=255)
+                  (f"CPU : {sysinfo.LoadPercent} % / {sysinfo.CPUTemp} C"), font=font, fill=255)
         draw.text((0, 32),
                   (f"Mem : {sysinfo.MemUsed} / {sysinfo.MemTotal} MB"), font=font, fill=255)
         draw.text((0, 48),
-                  (f"Disk : {sysinfo.DiskUsed} /  {sysinfo.DiskTotal} GB"), font=font, fill=255)
+                  (f"Disk : {sysinfo.DiskUsed} / {sysinfo.DiskTotal} GB"), font=font, fill=255)
 
     else:  # 3 < dipC = < 6
         # UPS Stats Display
@@ -201,19 +199,19 @@ while True:
         elif (upsinfo.UsbMicroVolt > 4000):
             ChargeStat = 'Charging Micro USB.'
         else:
-            ChargeStat = 'Not Charging'
+            ChargeStat = '  ** Not Charging **'
 
         draw.text((0, 0),
-                  (f"Pi: {upsinfo.PiVolt} V {upsinfo.PiCurrent} mA"), font=font, fill=255)
+                  (f"Pi: {upsinfo.PiVolt} mV {upsinfo.PiCurrent} mA"), font=font, fill=255)
         draw.text((0, 16),
-                  (f"Batt: {upsinfo.BattVolt} V  {upsinfo.BatRemaining} %"), font=font, fill=255)
+                  (f"Batt: {upsinfo.BattVolt} mV  {upsinfo.BatRemaining} %"), font=font, fill=255)
         if (upsinfo.BattCurrent > 0):
             draw.text((0, 32),
                       (f"Chrg: {upsinfo.BattCurrent} mA {upsinfo.BattPower} W"), font=font, fill=255)
         else:
             draw.text((0, 32),
                       (f"Dchrg: {-upsinfo.BattCurrent} mA {upsinfo.BattPower} W"), font=font, fill=255)
-        draw.text((15, 48), ChargeStat, font=font, fill=255)
+        draw.text((0, 48), ChargeStat, font=font, fill=255)
 
     # Display image.
     disp.image(image)
