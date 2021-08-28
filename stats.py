@@ -1,8 +1,8 @@
 #!/usr/bin/python3
 
-# Copyright (c) 2017 Adafruit Industries
-# Author: Tony DiCola & James DeVito
+# Copyright (c) 2021 Mark Verlinde
 #
+# Based on:
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
 # in the Software without restriction, including without limitation the rights
@@ -34,10 +34,42 @@ from PIL import Image
 from PIL import ImageDraw
 from PIL import ImageFont
 
-def stop(signum, frame):
+# Setup UPS I2C devices
+DEVICE_BUS = 1
+DEVICE_ADDR = 0x17
+PROTECT_VOLT = 3700
+SAMPLE_TIME = 2
+INA_DEVICE_ADDR = 0x40
+INA_BATT_ADDR = 0x45
+
+ups_i2c = I2C.get_i2c_device(DEVICE_ADDR)
+ina_i2c = INA219(0.00725, address=INA_DEVICE_ADDR)
+ina_i2c.configure()
+ina_batt_i2c = INA219(0.005, address=INA_BATT_ADDR)
+ina_batt_i2c.configure()
+
+# Setup 128x64 display with hardware I2C:
+# Note: for i2c_bus 3 add to /boot/config.txt:
+# dtoverlay=i2c-gpio,i2c_gpio_sda=5,i2c_gpio_scl=6,bus=3
+# then pin GPIO-5 (pin 29) is sda and GPIO-6 (pin 31) is scl of i2c_bus 3
+DEVICE_BUS_DISPLAY = 3
+disp = Adafruit_SSD1306.SSD1306_128_64(rst=None, i2c_bus=DEVICE_BUS_DISPLAY)
+disp.begin()
+disp.clear()
+disp.display()
+width = disp.width
+height = disp.height
+# Create blank image for drawing.
+image = Image.new('1', (width, height))
+draw = ImageDraw.Draw(image)
+# Alternatively load a TTF font.  Make sure the .ttf font file is in the same directory as the python script!
+# Some other nice fonts to try: http://www.dafont.com/bitmap.php
+font = ImageFont.truetype('PixelOperator.ttf', 16)
+
+
+def stopsig_handler(signum, frame):
     global Stop
     Stop = True
-
 
 
 def get_sysinfo(nic="eth0"):
@@ -84,15 +116,11 @@ def get_upsinfo():
                          "UsbCVolt UsbMicroVolt BatRemaining  "
                          "PiVolt PiCurrent PiPower BattVolt BattCurrent BattPower")
 
-    buf = []
-
     # UPS Register Addresses from
     # https://wiki.52pi.com/index.php/UPS_Plus_SKU:_EP-0136?spm=a2g0o.detail.1000023.17.4bfb6b35vkFvoW#USB_Plus_V5.0_Register_Mapping_Chart
-
     buf = ups_i2c.readList(0x07, 4)
     UsbCVolt = int.from_bytes([buf[0], buf[1]], byteorder='little')
     UsbMicroVolt = int.from_bytes([buf[2], buf[3]], byteorder='little')
-
     buf = ups_i2c.readList(0x13, 2)
     BatRemaining = int.from_bytes([buf[0], buf[1]], byteorder='little')
 
@@ -105,7 +133,6 @@ def get_upsinfo():
     except DeviceRangeError:
         PiCurrent = 0
         PiPower = 0
-
     BattVolt = int(ina_batt_i2c.voltage() * 1000)
     try:
         BattCurrent = int(ina_batt_i2c.current())
@@ -119,66 +146,17 @@ def get_upsinfo():
                    PiVolt, PiCurrent, PiPower, BattVolt, BattCurrent, BattPower)
 
 
-# Setup UPS
-DEVICE_BUS = 1
-DEVICE_ADDR = 0x17
-PROTECT_VOLT = 3700
-SAMPLE_TIME = 2
-INA_DEVICE_ADDR = 0x40
-INA_BATT_ADDR = 0x45
-
-ups_i2c = I2C.get_i2c_device(DEVICE_ADDR)
-
-ina_i2c = INA219(0.00725, address=INA_DEVICE_ADDR)
-ina_i2c.configure()
-ina_batt_i2c = INA219(0.005, address=INA_BATT_ADDR)
-ina_batt_i2c.configure()
-
-# 128x64 display with hardware I2C:
-
-# Note: for i2c_bus 3 add to /boot/config.txt:
-# dtoverlay=i2c-gpio,i2c_gpio_sda=5,i2c_gpio_scl=6,bus=3
-# then pin GPIO-5 (pin 29) is sda and GPIO-6 (pin 31) is scl of i2c_bus 3
-
-DEVICE_BUS_DISPLAY = 3   # 1 or 3
-disp = Adafruit_SSD1306.SSD1306_128_64(rst=None, i2c_bus=DEVICE_BUS_DISPLAY)
-
-# Initialize library.
-disp.begin()
-
-# Clear display.
-disp.clear()
-disp.display()
-
-# Create blank image for drawing.
-# Make sure to create image with mode '1' for 1-bit color.
-width = disp.width
-height = disp.height
-image = Image.new('1', (width, height))
-
-# Get drawing object to draw on image.
-draw = ImageDraw.Draw(image)
-
-# Display counter
-dispC = 0
-
-# Load default font.
-# font = ImageFont.load_default()
-
-# Alternatively load a TTF font.  Make sure the .ttf font file is in the same directory as the python script!
-# Some other nice fonts to try: http://www.dafont.com/bitmap.php
-font = ImageFont.truetype('PixelOperator.ttf', 16)
-
+signal.signal(signal.SIGINT, stopsig_handler)
+signal.signal(signal.SIGTERM, stopsig_handler)
 Stop = False
-signal.signal(signal.SIGINT, stop)
-signal.signal(signal.SIGTERM, stop)
+LoopCounter = 0
 
 while not Stop:
 
     # Draw a black filled box to clear the image.
     draw.rectangle((0, 0, width, height), outline=0, fill=0)
 
-    if (dispC <= 3):
+    if (LoopCounter <= 3):
         # Pi Stats Display
         sysinfo = (get_sysinfo())
 
@@ -218,14 +196,14 @@ while not Stop:
     disp.image(image)
     disp.display()
 
-    if (dispC == 6):
-        dispC = 0
-    dispC += 1
-
+    if (LoopCounter == 6):
+        LoopCounter = 0
+    LoopCounter += 1
     time.sleep(1)
 
-#STOP
+# STOP
 draw.rectangle((0, 0, width, height), outline=0, fill=0)
 draw.text((40, 20), "STOPPED", font=font, fill=255)
 disp.image(image)
 disp.display()
+exit(0)
