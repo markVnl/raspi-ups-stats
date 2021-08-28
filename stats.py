@@ -30,40 +30,46 @@ import Adafruit_GPIO.I2C as I2C
 from ina219 import INA219, DeviceRangeError
 import Adafruit_SSD1306
 
-from PIL import Image
-from PIL import ImageDraw
-from PIL import ImageFont
+from PIL import Image, ImageDraw, ImageFont
 
 # Setup UPS I2C devices
-DEVICE_BUS = 1
-DEVICE_ADDR = 0x17
-PROTECT_VOLT = 3700
-SAMPLE_TIME = 2
-INA_DEVICE_ADDR = 0x40
-INA_BATT_ADDR = 0x45
-
-ups_i2c = I2C.get_i2c_device(DEVICE_ADDR)
-ina_i2c = INA219(0.00725, address=INA_DEVICE_ADDR)
-ina_i2c.configure()
-ina_batt_i2c = INA219(0.005, address=INA_BATT_ADDR)
-ina_batt_i2c.configure()
+"""
+Besides the RTC The UPS Plus SKU: EP-0136 has 3 i2c devices on the default i2c_bus 1 :
+- The UPS itself on address 0x17 (with Little.Endian byte order)
+- A TI ina219 powermonitor for the RPI on addres 0x40
+  This "pi_power" monitor has a sense(shunt) resistor of 7.25 mOhm
+- A TI ina219 powermonitor for the battery  on address 0x45
+  This "bat_power" monitor has a sense(shunt) resistor of 5 mOhm
+Both powermoninitors are configured with a maximum voltage range of 16 Volt and
+a maximun expected current draw of 3 Amp for most sensible resolution
+"""
+ups = I2C.get_i2c_device(0x17)
+pi_power = INA219(0.00725, max_expected_amps=3, address=0x40)
+pi_power.configure(pi_power.RANGE_16V, pi_power.GAIN_AUTO)
+bat_power = INA219(0.005, max_expected_amps=3, address=0x45)
+bat_power.configure(bat_power.RANGE_16V, bat_power.GAIN_AUTO)
 
 # Setup 128x64 display with hardware I2C:
-# Note: for i2c_bus 3 add to /boot/config.txt:
-# dtoverlay=i2c-gpio,i2c_gpio_sda=5,i2c_gpio_scl=6,bus=3
-# then pin GPIO-5 (pin 29) is sda and GPIO-6 (pin 31) is scl of i2c_bus 3
-DEVICE_BUS_DISPLAY = 3
-disp = Adafruit_SSD1306.SSD1306_128_64(rst=None, i2c_bus=DEVICE_BUS_DISPLAY)
+"""
+Note: for i2c_bus=3 add to /boot/config.txt:
+dtoverlay=i2c-gpio,i2c_gpio_sda=5,i2c_gpio_scl=6,bus=3
+then pin GPIO-5 (pin 29) is sda and GPIO-6 (pin 31) is scl of i2c_bus 3
+
+A 1 bit (ie black and white) image with 128x64 pixels and a draw object 
+to draw the display representation are here initiated too.
+
+A Alternative TTF font is used: PixelOperator.ttf which can be downloaded from
+https://www.dafont.com/pixel-operator.font
+Make sure the .ttf font file is in the same directory as the python script!
+"""
+disp = Adafruit_SSD1306.SSD1306_128_64(rst=None, i2c_bus=3)
 disp.begin()
 disp.clear()
 disp.display()
 width = disp.width
 height = disp.height
-# Create blank image for drawing.
 image = Image.new('1', (width, height))
 draw = ImageDraw.Draw(image)
-# Alternatively load a TTF font.  Make sure the .ttf font file is in the same directory as the python script!
-# Some other nice fonts to try: http://www.dafont.com/bitmap.php
 font = ImageFont.truetype('PixelOperator.ttf', 16)
 
 
@@ -108,9 +114,9 @@ def get_upsinfo():
     """
     Collect USP information and return this in a named tuple
     """
-    global ups_i2c
-    global ina_i2c
-    global ina_batt_i2c
+    global ups
+    global pi_power
+    global bat_power
 
     UpsInfo = namedtuple("UpsInfo",
                          "UsbCVolt UsbMicroVolt BatRemaining  "
@@ -118,25 +124,25 @@ def get_upsinfo():
 
     # UPS Register Addresses from
     # https://wiki.52pi.com/index.php/UPS_Plus_SKU:_EP-0136?spm=a2g0o.detail.1000023.17.4bfb6b35vkFvoW#USB_Plus_V5.0_Register_Mapping_Chart
-    buf = ups_i2c.readList(0x07, 4)
+    buf = ups.readList(0x07, 4)
     UsbCVolt = int.from_bytes([buf[0], buf[1]], byteorder='little')
     UsbMicroVolt = int.from_bytes([buf[2], buf[3]], byteorder='little')
-    buf = ups_i2c.readList(0x13, 2)
+    buf = ups.readList(0x13, 2)
     BatRemaining = int.from_bytes([buf[0], buf[1]], byteorder='little')
 
     # Read both ina219 powermonitors
-    PiVolt = int(ina_i2c.voltage() * 1000)
+    PiVolt = int(pi_power.voltage() * 1000)
     try:
-        PiCurrent = int(ina_i2c.current())
-        PiPower = int(ina_i2c.power())
-    except DeviceRangeError: # (Out Of Range)
+        PiCurrent = int(pi_power.current())
+        PiPower = int(pi_power.power())
+    except DeviceRangeError:  # (Out Of Range)
         BattCurrent = "*OOR*"
         BattPower = "*OOR*"
-    BattVolt = int(ina_batt_i2c.voltage() * 1000)
+    BattVolt = int(bat_power.voltage() * 1000)
     try:
-        BattCurrent = int(ina_batt_i2c.current())
-        BattPower = int(ina_batt_i2c.power())
-    except DeviceRangeError: # (Out Of Range)
+        BattCurrent = int(bat_power.current())
+        BattPower = int(bat_power.power())
+    except DeviceRangeError:  # (Out Of Range)
         BattCurrent = "*OOR*"
         BattPower = "*OOR*"
 
