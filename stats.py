@@ -24,6 +24,7 @@
 import psutil
 from collections import namedtuple
 import time
+import signal
 
 import Adafruit_GPIO.I2C as I2C
 from ina219 import INA219, DeviceRangeError
@@ -32,6 +33,11 @@ import Adafruit_SSD1306
 from PIL import Image
 from PIL import ImageDraw
 from PIL import ImageFont
+
+def stop(signum, frame):
+    global Stop
+    Stop = True
+
 
 
 def get_sysinfo(nic="eth0"):
@@ -163,7 +169,11 @@ dispC = 0
 # Some other nice fonts to try: http://www.dafont.com/bitmap.php
 font = ImageFont.truetype('PixelOperator.ttf', 16)
 
-while True:
+Stop = False
+signal.signal(signal.SIGINT, stop)
+signal.signal(signal.SIGTERM, stop)
+
+while not Stop:
 
     # Draw a black filled box to clear the image.
     draw.rectangle((0, 0, width, height), outline=0, fill=0)
@@ -213,3 +223,9 @@ while True:
     dispC += 1
 
     time.sleep(1)
+
+#STOP
+draw.rectangle((0, 0, width, height), outline=0, fill=0)
+draw.text((40, 20), "STOPPED", font=font, fill=255)
+disp.image(image)
+disp.display()
